@@ -1,33 +1,133 @@
-# ParkedTube
+<p align="center">
+  <img src="docs/assets/parkedtube-logo.png" width="176" alt="ParkedTube logo">
+</p>
 
-ParkedTube is a small Android app that opens YouTube in a full-screen WebView on a
-phone and on supported Android Auto parked-app hosts. The car display gets a landscape
-layout and an integrated Russian/English search keyboard; the phone keeps its normal
-orientation and system keyboard.
+<h1 align="center">ParkedTube</h1>
 
-This project is intended for personal testing. It is not affiliated with or endorsed
-by Google or YouTube. Playback is for parked use only: the app does not disable or
-bypass Android Auto driver-distraction restrictions.
+<p align="center">
+  <strong>A focused YouTube experience for supported Android Auto parked-app screens.</strong>
+</p>
 
-## Requirements
+<p align="center">
+  Full-screen playback on the car display, an integrated Russian/English keyboard,
+  and a normal adaptive experience on the phone.
+</p>
 
-- Docker Desktop or another Docker Engine
-- An Android phone with Android Auto developer mode enabled for apps installed outside
-  Google Play
-- A compatible Android Auto host that exposes parked apps
+<p align="center">
+  <a href="https://github.com/gadmin2151/ParkedTube/actions/workflows/ci.yml"><img alt="CI status" src="https://img.shields.io/github/actions/workflow/status/gadmin2151/ParkedTube/ci.yml?branch=main&style=for-the-badge&label=CI&labelColor=18181b"></a>
+  <a href="https://github.com/gadmin2151/ParkedTube/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/gadmin2151/ParkedTube?style=for-the-badge&label=Release&labelColor=18181b&color=ff1f2d"></a>
+  <img alt="Android 9 or newer" src="https://img.shields.io/badge/Android-9%2B-3ddc84?style=for-the-badge&logo=android&logoColor=white&labelColor=18181b">
+  <a href="LICENSE"><img alt="PolyForm Noncommercial license" src="https://img.shields.io/badge/License-PolyForm_Noncommercial-f4f4f5?style=for-the-badge&labelColor=18181b"></a>
+</p>
 
-## Build
+<p align="center">
+  <a href="https://github.com/gadmin2151/ParkedTube/releases/latest"><strong>Download APK</strong></a>
+  &nbsp;&middot;&nbsp;
+  <a href="#build-in-docker">Build in Docker</a>
+  &nbsp;&middot;&nbsp;
+  <a href="#android-auto-setup">Android Auto setup</a>
+  &nbsp;&middot;&nbsp;
+  <a href="#license">License</a>
+</p>
 
-The complete APK build runs inside Docker. No local Android SDK or Gradle installation
-is required.
+---
+
+ParkedTube is a small native Android application that opens YouTube in a hardened,
+full-screen WebView. On a compatible Android Auto host it uses a landscape layout and
+its own large search keyboard. On the phone it follows the device orientation and uses
+the normal system keyboard.
+
+> [!IMPORTANT]
+> ParkedTube is designed for use while the vehicle is parked. It does not disable,
+> spoof, or bypass Android Auto or vehicle driver-distraction restrictions.
+
+## Highlights
+
+| | Capability |
+|---|---|
+| **Car display** | Full-screen landscape experience on compatible parked-app hosts |
+| **Phone** | Adaptive orientation with the regular Android keyboard |
+| **Search** | Large integrated Russian/English keyboard on the car display |
+| **Playback** | Full-screen video with media playback kept inside the app |
+| **Network** | HTTPS-only navigation restricted to YouTube and Google sign-in pages |
+| **Build** | Reproducible debug and signed release builds entirely inside Docker |
+| **Privacy** | No ParkedTube backend, account system, telemetry, or analytics |
+
+## Compatibility
+
+| Component | Requirement |
+|---|---|
+| Phone | Android 9 (API 28) or newer |
+| Android Auto | Developer mode enabled for applications installed outside Google Play |
+| Car host | Must expose Android Auto parked apps in its launcher |
+| Build machine | Docker Desktop or another Docker Engine |
+
+Support for parked apps and their availability while driving are controlled by Android
+Auto and the vehicle head unit. Compatibility therefore varies between vehicles and
+Android Auto versions.
+
+## Download and install
+
+Download the signed APK from the
+[latest GitHub Release](https://github.com/gadmin2151/ParkedTube/releases/latest), then
+install it on the phone connected to Android Auto:
+
+```bash
+adb install -r ParkedTube-1.4.1.apk
+```
+
+Each release includes a `.sha256` checksum, a GitHub artifact attestation, the license,
+and the required copyright notice. If Android reports a signing conflict with an older
+test build, uninstall that build once and install the current release again.
+
+## Android Auto setup
+
+1. Install ParkedTube on the phone.
+2. Open Android Auto settings and enable developer mode.
+3. Open the Android Auto developer settings and enable **Unknown sources**.
+4. Open **Customize launcher** and enable **ParkedTube**.
+5. Reconnect the phone to the car while parked.
+
+If ParkedTube does not appear immediately, stop the Android Auto host cache and reopen
+its launcher settings:
+
+```bash
+./scripts/reset-android-auto-cache.sh
+```
+
+For a detailed device and Android Auto report:
+
+```bash
+./scripts/diagnose-android-auto.sh
+```
+
+Diagnostics are written under `outputs/diagnostics/` and are ignored by Git. Review a
+report before sharing it because device logs can contain personal data.
+
+## Build in Docker
+
+The complete Android SDK and Gradle build run inside Docker. No local Android SDK,
+Gradle, or Java installation is required.
+
+### Debug APK
 
 ```bash
 ./scripts/build-apk.sh debug
 ```
 
-The result is written to `outputs/ParkedTube-debug.apk` after the container exits.
+Output:
 
-For a signed release build, provide the signing key through environment variables:
+```text
+outputs/ParkedTube-debug.apk
+outputs/ParkedTube-debug.apk.sha256
+```
+
+The build runs Android lint, unit tests, APK assembly, signature verification, package
+name verification, and checksum generation.
+
+### Signed release APK
+
+Keep the keystore and credentials outside the repository and pass them at build time:
 
 ```bash
 PARKEDTUBE_KEYSTORE_PATH=/absolute/path/parkedtube-release.jks \
@@ -37,50 +137,64 @@ PARKEDTUBE_KEY_PASSWORD='...' \
 ./scripts/build-apk.sh release
 ```
 
-The result is written to `outputs/ParkedTube-<version>.apk` together with its SHA-256
-checksum. Keystores and passwords must never be committed to the repository.
+Output:
 
-## Install
-
-```bash
-adb install -r outputs/ParkedTube-1.4.1.apk
+```text
+outputs/ParkedTube-<version>.apk
+outputs/ParkedTube-<version>.apk.sha256
 ```
 
-If an older build was signed with a different key, Android requires uninstalling that
-build once before installing the release APK.
+## Releases and packages
 
-## GitHub release
+Every push and pull request is verified by
+[GitHub Actions](https://github.com/gadmin2151/ParkedTube/actions). A tag matching the
+version in `gradle.properties`, such as `v1.4.1`, starts the release workflow. It:
 
-Every push and pull request builds and tests a debug APK in Docker. A tag matching the
-version in `gradle.properties`, for example `v1.4.1`, starts the release workflow. It:
+1. builds and verifies the signed APK inside Docker;
+2. creates a GitHub artifact attestation;
+3. publishes `dev.codex:parkedtube:<version>` to GitHub Packages;
+4. creates a GitHub Release with the APK, checksum, license, and notice.
 
-1. builds and verifies a signed release APK in Docker;
-2. uploads the APK as a workflow artifact;
-3. creates a GitHub artifact attestation;
-4. publishes `dev.codex:parkedtube:<version>` to GitHub Packages;
-5. creates a GitHub Release with the APK and checksum.
+Release signing uses these GitHub Actions secrets:
 
-The repository must define these Actions secrets:
+```text
+ANDROID_KEYSTORE_BASE64
+ANDROID_KEYSTORE_PASSWORD
+ANDROID_KEY_ALIAS
+ANDROID_KEY_PASSWORD
+```
 
-- `ANDROID_KEYSTORE_BASE64`
-- `ANDROID_KEYSTORE_PASSWORD`
-- `ANDROID_KEY_ALIAS`
-- `ANDROID_KEY_PASSWORD`
+Never commit keystores, passwords, tokens, cookies, or device diagnostics.
 
-## Android Auto
+## Project layout
 
-Install the APK on the phone, enable developer mode in Android Auto, allow unknown
-sources, and reconnect to the car. ParkedTube should then appear in the Android Auto
-launcher customization list. Availability and driving restrictions are controlled by
-Android Auto and the vehicle host.
+```text
+app/src/main/          Android application and resources
+app/src/test/          URL-policy unit tests
+scripts/               Docker build and Android Auto diagnostics
+.github/workflows/     CI and release automation
+outputs/               Local APKs, checksums, and diagnostics
+docs/assets/           Repository branding
+```
+
+## Security
+
+WebView navigation is limited to HTTPS YouTube and Google authentication pages.
+Cleartext traffic, mixed content, file access, and content access are disabled. See
+[SECURITY.md](SECURITY.md) for reporting guidance.
 
 ## License
 
-ParkedTube is available under the
+ParkedTube is source-available under the
 [PolyForm Noncommercial License 1.0.0](LICENSE). You may use, study, modify, and
 redistribute it for noncommercial purposes. Commercial use, paid distribution, and
-resale are not permitted without a separate written commercial license from the
-copyright holder.
+resale require a separate written commercial license from the copyright holder.
 
-This is a source-available license, not an OSI-approved open-source license. Copies and
-modified versions must retain the license terms and the required notice in `NOTICE`.
+Copies and modified versions must retain the license terms and the required notice in
+[NOTICE](NOTICE). PolyForm Noncommercial is not an OSI-approved open-source license.
+
+## Disclaimer
+
+ParkedTube is an independent project. It is not affiliated with, sponsored by, or
+endorsed by Google, YouTube, Android Auto, or any vehicle manufacturer. YouTube usage
+remains subject to YouTube's terms and availability.
