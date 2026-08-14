@@ -1,0 +1,13 @@
+.DS_Store
+.android
+.ci-secrets
+.container-home
+.git
+.github
+.gradle
+.gradle-docker
+.idea
+.local
+**/build
+debug-keystore
+outputs

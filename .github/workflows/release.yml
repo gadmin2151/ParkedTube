@@ -1,0 +1,98 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  packages: write
+  attestations: write
+  id-token: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Validate release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^PARKEDTUBE_VERSION_NAME=//p' gradle.properties)"
+          if [[ "${GITHUB_REF_NAME}" != "v${version}" ]]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match app version v${version}." >&2
+            exit 1
+          fi
+
+      - name: Restore release keystore
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${ANDROID_KEYSTORE_BASE64}" ]]; then
+            echo "ANDROID_KEYSTORE_BASE64 is not configured." >&2
+            exit 1
+          fi
+          umask 077
+          printf '%s' "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > "${RUNNER_TEMP}/parkedtube-release.jks"
+
+      - name: Build, verify, and publish release APK in Docker
+        env:
+          PARKEDTUBE_KEYSTORE_PATH: ${{ runner.temp }}/parkedtube-release.jks
+          PARKEDTUBE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          PARKEDTUBE_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          PARKEDTUBE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: ./scripts/build-apk.sh release publish
+
+      - name: Resolve APK path
+        id: artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          apk="outputs/ParkedTube-${version}.apk"
+          test -f "${apk}"
+          echo "apk=${apk}" >> "${GITHUB_OUTPUT}"
+          echo "checksum=${apk}.sha256" >> "${GITHUB_OUTPUT}"
+
+      - name: Attest APK provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: ${{ steps.artifact.outputs.apk }}
+
+      - name: Upload release workflow artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ParkedTube-${{ github.ref_name }}
+          path: |
+            ${{ steps.artifact.outputs.apk }}
+            ${{ steps.artifact.outputs.checksum }}
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Create GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release create "${GITHUB_REF_NAME}" \
+            "${{ steps.artifact.outputs.apk }}" \
+            "${{ steps.artifact.outputs.checksum }}" \
+            --verify-tag \
+            --title "ParkedTube ${GITHUB_REF_NAME#v}" \
+            --generate-notes

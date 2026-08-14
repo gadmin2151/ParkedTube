@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">ParkedTube</string>
+    <string name="loading_youtube">Загрузка YouTube</string>
+    <string name="error_title">Не удалось открыть YouTube</string>
+    <string name="error_message">Проверь интернет на телефоне и попробуй еще раз.</string>
+    <string name="retry">Повторить</string>
+    <string name="search_placeholder">Поиск на YouTube</string>
+    <string name="search">Найти</string>
+    <string name="space">Пробел</string>
+</resources>
