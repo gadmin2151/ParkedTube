@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.1 - 2026-08-14
+
+- Licensed ParkedTube under PolyForm Noncommercial 1.0.0.
+- Added the license and required copyright notice to release APKs and package metadata.
+
 ## 1.4.0 - 2026-08-14
 
 - Consolidated the project into one ParkedTube application module.

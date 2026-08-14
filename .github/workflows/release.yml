@@ -81,6 +81,8 @@ jobs:
           path: |
             ${{ steps.artifact.outputs.apk }}
             ${{ steps.artifact.outputs.checksum }}
+            LICENSE
+            NOTICE
           if-no-files-found: error
           retention-days: 90
 
@@ -93,6 +95,8 @@ jobs:
           gh release create "${GITHUB_REF_NAME}" \
             "${{ steps.artifact.outputs.apk }}" \
             "${{ steps.artifact.outputs.checksum }}" \
+            LICENSE \
+            NOTICE \
             --verify-tag \
             --title "ParkedTube ${GITHUB_REF_NAME#v}" \
             --generate-notes

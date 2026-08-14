@@ -13,6 +13,13 @@ def hasReleaseSigning = [
         releaseKeyAlias,
         releaseKeyPassword
 ].every { it != null && !it.isBlank() }
+def generatedLegalAssetsDir = layout.buildDirectory.dir("generated/assets/legal")
+
+def generateLegalAssets = tasks.register("generateLegalAssets", Copy) {
+    from(rootProject.file("LICENSE"))
+    from(rootProject.file("NOTICE"))
+    into(generatedLegalAssetsDir.map { it.dir("legal") })
+}
 
 android {
     namespace "dev.codex.aaparkedyoutube"
@@ -63,6 +70,10 @@ android {
     testOptions {
         unitTests.returnDefaultValues = true
     }
+
+    sourceSets {
+        main.assets.srcDir(generatedLegalAssetsDir)
+    }
 }
 
 dependencies {
@@ -70,6 +81,10 @@ dependencies {
 }
 
 tasks.configureEach { task ->
+    if (task.name == "preBuild") {
+        task.dependsOn(generateLegalAssets)
+    }
+
     if (task.name == "assembleRelease" && !hasReleaseSigning) {
         task.doFirst {
             throw new GradleException(
@@ -96,6 +111,13 @@ afterEvaluate {
                     name = "ParkedTube"
                     description = "Parked Android Auto YouTube viewer"
                     url = "https://github.com/gadmin2151/ParkedTube"
+                    licenses {
+                        license {
+                            name = "PolyForm Noncommercial License 1.0.0"
+                            url = "https://polyformproject.org/licenses/noncommercial/1.0.0"
+                            distribution = "repo"
+                        }
+                    }
                 }
             }
         }

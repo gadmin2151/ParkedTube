@@ -43,7 +43,7 @@ checksum. Keystores and passwords must never be committed to the repository.
 ## Install
 
 ```bash
-adb install -r outputs/ParkedTube-1.4.0.apk
+adb install -r outputs/ParkedTube-1.4.1.apk
 ```
 
 If an older build was signed with a different key, Android requires uninstalling that
@@ -52,7 +52,7 @@ build once before installing the release APK.
 ## GitHub release
 
 Every push and pull request builds and tests a debug APK in Docker. A tag matching the
-version in `gradle.properties`, for example `v1.4.0`, starts the release workflow. It:
+version in `gradle.properties`, for example `v1.4.1`, starts the release workflow. It:
 
 1. builds and verifies a signed release APK in Docker;
 2. uploads the APK as a workflow artifact;
@@ -73,3 +73,14 @@ Install the APK on the phone, enable developer mode in Android Auto, allow unkno
 sources, and reconnect to the car. ParkedTube should then appear in the Android Auto
 launcher customization list. Availability and driving restrictions are controlled by
 Android Auto and the vehicle host.
+
+## License
+
+ParkedTube is available under the
+[PolyForm Noncommercial License 1.0.0](LICENSE). You may use, study, modify, and
+redistribute it for noncommercial purposes. Commercial use, paid distribution, and
+resale are not permitted without a separate written commercial license from the
+copyright holder.
+
+This is a source-available license, not an OSI-approved open-source license. Copies and
+modified versions must retain the license terms and the required notice in `NOTICE`.
