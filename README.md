@@ -48,10 +48,28 @@ the normal system keyboard.
 | **Car display** | Full-screen landscape experience on compatible parked-app hosts |
 | **Phone** | Adaptive orientation with the regular Android keyboard |
 | **Search** | Large integrated Russian/English keyboard on the car display |
+| **Navigation** | Compact native back, home, search, saved pages and settings controls |
+| **Library** | Local bookmarks and recent searches, with deletion controls |
+| **Comfort** | Adjustable text size, optional last-page restoration, same-page network retry |
 | **Playback** | Full-screen video with media playback kept inside the app |
 | **Network** | HTTPS-only navigation restricted to YouTube and Google sign-in pages |
 | **Build** | Reproducible debug and signed release builds entirely inside Docker |
 | **Privacy** | No ParkedTube backend, account system, telemetry, or analytics |
+
+## What's new in 1.5
+
+The new 27G icon combines a parked-car silhouette, a play button and parking markings.
+Adaptive and monochrome launcher variants support Android icon shapes and themed icons.
+
+The app still opens directly in YouTube. The native toolbar provides search without
+depending on YouTube's page layout. Saved pages and the eight most recent app searches
+stay on the device; they are not synchronized with a YouTube account. Up to 40 pages
+can be saved. Settings includes text size, optional last-page restoration, and search
+history deletion. Restoration opens the page, not an exact playback timestamp.
+
+The toolbar disappears during full-screen playback. The car keyboard includes numbers
+and punctuation, remembers Russian/English, and clears its text on a long press of
+backspace. Phone input continues to use the Android keyboard.
 
 ## Compatibility
 
@@ -73,7 +91,7 @@ Download the signed APK from the
 install it on the phone connected to Android Auto:
 
 ```bash
-adb install -r ParkedTube-1.4.1.apk
+adb install -r ParkedTube-1.5.0.apk
 ```
 
 Each release includes a `.sha256` checksum, a GitHub artifact attestation, the license,

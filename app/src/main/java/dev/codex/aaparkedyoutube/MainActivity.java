@@ -11,6 +11,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.content.res.Configuration;
 import android.view.Display;
 import android.view.Gravity;
 import android.view.View;
@@ -35,17 +36,19 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.widget.Toast;
+import android.widget.ScrollView;
 
 import org.json.JSONObject;
 
 public class MainActivity extends Activity {
     private static final String YOUTUBE_URL = "https://www.youtube.com/";
-    private static final int COLOR_BACKGROUND = Color.rgb(9, 9, 10);
-    private static final int COLOR_SURFACE = Color.rgb(22, 22, 24);
+    private static final int COLOR_BACKGROUND = Color.rgb(15, 17, 20);
+    private static final int COLOR_SURFACE = Color.rgb(27, 30, 35);
     private static final int COLOR_KEY = Color.rgb(43, 43, 48);
     private static final int COLOR_TEXT = Color.WHITE;
-    private static final int COLOR_TEXT_SECONDARY = Color.rgb(176, 176, 184);
-    private static final int COLOR_RED = Color.rgb(255, 0, 0);
+    private static final int COLOR_TEXT_SECONDARY = Color.rgb(167, 176, 188);
+    private static final int COLOR_RED = Color.rgb(255, 67, 83);
     private static final int COLOR_BORDER = Color.rgb(66, 66, 74);
 
     private static final String[] RU_ROWS = {
@@ -58,9 +61,13 @@ public class MainActivity extends Activity {
             "asdfghjkl",
             "zxcvbnm"
     };
+    private static final String[] SYMBOL_ROWS = {"1234567890", "-/:;()&@\"", ".,?!'_%+="};
 
     private FrameLayout root;
     private ParkedTubeWebView webView;
+    private BrowserPreferences preferences;
+    private BrowserControls controls;
+    private FrameLayout browserContent;
     private View loadingOverlay;
     private View errorOverlay;
     private LinearLayout keyboardOverlay;
@@ -71,6 +78,9 @@ public class MainActivity extends Activity {
     private WebChromeClient.CustomViewCallback fullscreenCallback;
     private String keyboardText = "";
     private boolean keyboardEnglish;
+    private boolean keyboardSymbols;
+    private boolean nativeSearch;
+    private String lastRequestedUrl = YOUTUBE_URL;
     private boolean hasLoadedPage;
     private boolean pageFailed;
 
@@ -93,6 +103,9 @@ public class MainActivity extends Activity {
 
         root = new FrameLayout(this);
         root.setBackgroundColor(COLOR_BACKGROUND);
+        preferences = new BrowserPreferences(this);
+        keyboardEnglish = preferences.englishKeyboard();
+        browserContent = new FrameLayout(this);
 
         webView = new ParkedTubeWebView(this);
         webView.setBackgroundColor(COLOR_BACKGROUND);
@@ -112,6 +125,8 @@ public class MainActivity extends Activity {
 
             @Override
             public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+                if (TrustedUrlPolicy.isTrustedUrl(url)) lastRequestedUrl = url;
+                hideCarKeyboard();
                 pageFailed = false;
                 progressBar.setVisibility(View.VISIBLE);
                 progressBar.setProgress(8);
@@ -129,7 +144,13 @@ public class MainActivity extends Activity {
                     hasLoadedPage = true;
                     hideOverlays();
                     progressBar.setVisibility(View.GONE);
+                    updateBrowserPage();
                 }
+            }
+
+            @Override
+            public void doUpdateVisitedHistory(WebView view, String url, boolean isReload) {
+                updateBrowserPage();
             }
 
             @Override
@@ -158,6 +179,11 @@ public class MainActivity extends Activity {
         });
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
+            public void onReceivedTitle(WebView view, String title) {
+                updateBrowserPage();
+            }
+
+            @Override
             public void onProgressChanged(WebView view, int newProgress) {
                 progressBar.setProgress(newProgress);
                 progressBar.setVisibility(newProgress >= 100 ? View.GONE : View.VISIBLE);
@@ -171,9 +197,11 @@ public class MainActivity extends Activity {
                 }
 
                 hideCarKeyboard();
+                controls.closePanel();
                 fullscreenView = view;
                 fullscreenCallback = callback;
-                webView.setVisibility(View.GONE);
+                browserContent.setVisibility(View.GONE);
+                controls.toolbar().setVisibility(View.GONE);
                 root.addView(fullscreenView, fullScreenLayoutParams());
                 hideSystemUi();
             }
@@ -195,6 +223,7 @@ public class MainActivity extends Activity {
         settings.setDisplayZoomControls(false);
         settings.setSupportZoom(false);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+        settings.setTextZoom(preferences.textZoom());
         settings.setAllowContentAccess(false);
         settings.setAllowFileAccess(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
@@ -205,29 +234,55 @@ public class MainActivity extends Activity {
         cookieManager.setAcceptCookie(true);
         cookieManager.setAcceptThirdPartyCookies(webView, true);
 
-        root.addView(webView, fullScreenLayoutParams());
+        controls = new BrowserControls(this, preferences, new BrowserControls.Actions() {
+            @Override public void back() { onBackPressed(); }
+            @Override public void home() { navigateTo(YOUTUBE_URL); }
+            @Override public void navigate(String url) { navigateTo(url); }
+            @Override public void search(String query) { searchYouTube(query); }
+            @Override public void carInput(String query) {
+                showCarKeyboard(query);
+                nativeSearch = true;
+            }
+            @Override public void reload() { retryPage(); }
+            @Override public void textZoom(int zoom) { webView.getSettings().setTextZoom(zoom); }
+            @Override public boolean carDisplay() { return shouldUseCarKeyboard(); }
+        });
+        FrameLayout.LayoutParams contentParams = fullScreenLayoutParams();
+        contentParams.topMargin = dp(56);
+        root.addView(browserContent, contentParams);
+        browserContent.addView(webView, fullScreenLayoutParams());
         loadingOverlay = buildLoadingOverlay();
         errorOverlay = buildErrorOverlay();
         keyboardOverlay = buildKeyboardOverlay();
         progressBar = buildProgressBar();
-        root.addView(loadingOverlay, fullScreenLayoutParams());
-        root.addView(errorOverlay, fullScreenLayoutParams());
-        root.addView(progressBar, progressLayoutParams());
+        browserContent.addView(loadingOverlay, fullScreenLayoutParams());
+        browserContent.addView(errorOverlay, fullScreenLayoutParams());
+        browserContent.addView(progressBar, progressLayoutParams());
+        root.addView(controls.toolbar(), new FrameLayout.LayoutParams(-1, dp(56), Gravity.TOP));
+        root.addView(controls.panel(), contentParams);
         root.addView(keyboardOverlay, keyboardLayoutParams());
         errorOverlay.setVisibility(View.GONE);
         keyboardOverlay.setVisibility(View.GONE);
         progressBar.setVisibility(View.GONE);
 
         setContentView(root);
+        root.setOnApplyWindowInsetsListener((view, insets) -> {
+            android.view.DisplayCutout cutout = insets.getDisplayCutout();
+            view.setPadding(cutout == null ? 0 : cutout.getSafeInsetLeft(),
+                    cutout == null ? 0 : cutout.getSafeInsetTop(),
+                    cutout == null ? 0 : cutout.getSafeInsetRight(),
+                    cutout == null ? 0 : cutout.getSafeInsetBottom());
+            return insets;
+        });
         hideSystemUi();
 
         if (savedInstanceState == null) {
             showLoading();
-            webView.loadUrl(YOUTUBE_URL);
+            webView.loadUrl(preferences.startUrl(YOUTUBE_URL));
         } else {
             if (webView.restoreState(savedInstanceState) == null) {
                 showLoading();
-                webView.loadUrl(YOUTUBE_URL);
+                webView.loadUrl(preferences.startUrl(YOUTUBE_URL));
             } else {
                 hasLoadedPage = true;
                 hideOverlays();
@@ -253,6 +308,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         if (webView != null) {
+            preferences.rememberPage(webView.getUrl());
             webView.onPause();
             CookieManager.getInstance().flush();
         }
@@ -264,7 +320,9 @@ public class MainActivity extends Activity {
     protected void onDestroy() {
         closeFullscreenVideo();
         if (webView != null) {
-            root.removeView(webView);
+            browserContent.removeView(webView);
+            webView.removeJavascriptInterface("ParkedTubeKeyboardBridge");
+            webView.stopLoading();
             webView.destroy();
             webView = null;
         }
@@ -295,6 +353,11 @@ public class MainActivity extends Activity {
             return;
         }
 
+        if (controls != null && controls.isPanelOpen()) {
+            controls.closePanel();
+            return;
+        }
+
         if (webView != null && webView.canGoBack()) {
             webView.goBack();
             return;
@@ -310,7 +373,8 @@ public class MainActivity extends Activity {
 
         root.removeView(fullscreenView);
         fullscreenView = null;
-        webView.setVisibility(View.VISIBLE);
+        browserContent.setVisibility(View.VISIBLE);
+        controls.toolbar().setVisibility(View.VISIBLE);
 
         if (fullscreenCallback != null) {
             fullscreenCallback.onCustomViewHidden();
@@ -373,6 +437,7 @@ public class MainActivity extends Activity {
         header.addView(keyboardPreview, previewParams);
 
         Button close = makeKeyboardButton("×", 24, COLOR_KEY, 1f);
+        close.setContentDescription(getString(R.string.close));
         close.setOnClickListener(view -> hideCarKeyboard());
         LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(dp(64), dp(52));
         closeParams.leftMargin = dp(8);
@@ -390,7 +455,12 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT
         );
         keysParams.topMargin = dp(8);
-        panel.addView(keyboardKeysContainer, keysParams);
+        ScrollView keysScroll = new ScrollView(this);
+        keysScroll.setFillViewport(true);
+        keysScroll.addView(keyboardKeysContainer);
+        keysParams.height = Math.min(dp(220), Math.max(dp(150),
+                getResources().getDisplayMetrics().heightPixels - dp(150)));
+        panel.addView(keysScroll, keysParams);
         renderKeyboardKeys();
 
         return panel;
@@ -402,7 +472,7 @@ public class MainActivity extends Activity {
         }
 
         keyboardKeysContainer.removeAllViews();
-        String[] rows = keyboardEnglish ? EN_ROWS : RU_ROWS;
+        String[] rows = keyboardSymbols ? SYMBOL_ROWS : keyboardEnglish ? EN_ROWS : RU_ROWS;
 
         for (String row : rows) {
             LinearLayout keyRow = buildKeyboardRow();
@@ -420,13 +490,31 @@ public class MainActivity extends Activity {
         Button language = makeKeyboardButton(keyboardEnglish ? "РУ" : "EN", 18, COLOR_KEY, 1f);
         language.setOnClickListener(view -> {
             keyboardEnglish = !keyboardEnglish;
+            keyboardSymbols = false;
+            preferences.setEnglishKeyboard(keyboardEnglish);
             renderKeyboardKeys();
             hideSystemUi();
         });
+        language.setContentDescription(getString(R.string.switch_language));
         addKeyboardKey(bottomRow, language, 1.1f);
+
+        Button symbols = makeKeyboardButton(keyboardSymbols ? "ABC" : "123", 18, COLOR_KEY, 1f);
+        symbols.setContentDescription(getString(R.string.switch_symbols));
+        symbols.setOnClickListener(view -> {
+            keyboardSymbols = !keyboardSymbols;
+            renderKeyboardKeys();
+        });
+        addKeyboardKey(bottomRow, symbols, 1.1f);
 
         Button backspace = makeKeyboardButton("⌫", 22, COLOR_KEY, 1f);
         backspace.setOnClickListener(view -> backspaceKeyboardText());
+        backspace.setContentDescription(getString(R.string.backspace));
+        backspace.setOnLongClickListener(view -> {
+            keyboardText = "";
+            updateKeyboardPreview();
+            if (!nativeSearch) pushKeyboardTextToPage();
+            return true;
+        });
         addKeyboardKey(bottomRow, backspace, 1.1f);
 
         Button space = makeKeyboardButton(getString(R.string.space), 18, COLOR_KEY, 1f);
@@ -498,12 +586,13 @@ public class MainActivity extends Activity {
         return drawable;
     }
 
-    private GradientDrawable buildKeyBackground(int color) {
+    private android.graphics.drawable.Drawable buildKeyBackground(int color) {
         GradientDrawable drawable = new GradientDrawable();
         drawable.setColor(color);
         drawable.setStroke(dp(1), COLOR_BORDER);
         drawable.setCornerRadius(dp(8));
-        return drawable;
+        return new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(0x33FFFFFF), drawable, null);
     }
 
     private View buildLoadingOverlay() {
@@ -549,16 +638,15 @@ public class MainActivity extends Activity {
 
         ProgressBar spinner = new ProgressBar(this);
         spinner.setIndeterminate(true);
+        spinner.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(COLOR_RED));
         LinearLayout.LayoutParams spinnerParams = new LinearLayout.LayoutParams(dp(42), dp(42));
         spinnerParams.topMargin = dp(26);
         content.addView(spinner, spinnerParams);
 
-        FrameLayout.LayoutParams contentParams = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-        );
-        contentParams.gravity = Gravity.CENTER;
-        overlay.addView(content, contentParams);
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
+        overlay.addView(scroll, fullScreenLayoutParams());
         return overlay;
     }
 
@@ -613,9 +701,7 @@ public class MainActivity extends Activity {
         retryButton.setMinHeight(dp(54));
         retryButton.setBackground(buildButtonBackground());
         retryButton.setOnClickListener(view -> {
-            showLoading();
-            webView.loadUrl(YOUTUBE_URL);
-            hideSystemUi();
+            retryPage();
         });
         LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -624,12 +710,10 @@ public class MainActivity extends Activity {
         buttonParams.topMargin = dp(28);
         content.addView(retryButton, buttonParams);
 
-        FrameLayout.LayoutParams contentParams = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-        );
-        contentParams.gravity = Gravity.CENTER;
-        overlay.addView(content, contentParams);
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
+        overlay.addView(scroll, fullScreenLayoutParams());
         return overlay;
     }
 
@@ -657,6 +741,7 @@ public class MainActivity extends Activity {
     }
 
     private void showError() {
+        hideCarKeyboard();
         loadingOverlay.setVisibility(View.GONE);
         errorOverlay.setVisibility(View.VISIBLE);
         progressBar.setVisibility(View.GONE);
@@ -675,6 +760,10 @@ public class MainActivity extends Activity {
         }
 
         keyboardText = text == null ? "" : text;
+        if (keyboardText.length() > BrowserLibrary.MAX_QUERY_LENGTH) {
+            keyboardText = BrowserLibrary.cleanQuery(keyboardText);
+        }
+        nativeSearch = false;
         updateKeyboardPreview();
         keyboardOverlay.setVisibility(View.VISIBLE);
         hidePhoneKeyboard();
@@ -685,6 +774,7 @@ public class MainActivity extends Activity {
         if (keyboardOverlay != null) {
             keyboardOverlay.setVisibility(View.GONE);
         }
+        nativeSearch = false;
         hidePhoneKeyboard();
         hideSystemUi();
     }
@@ -694,13 +784,17 @@ public class MainActivity extends Activity {
             return;
         }
         keyboardText = text == null ? "" : text;
+        if (keyboardText.length() > BrowserLibrary.MAX_QUERY_LENGTH) {
+            keyboardText = BrowserLibrary.cleanQuery(keyboardText);
+        }
         updateKeyboardPreview();
     }
 
     private void appendKeyboardText(String value) {
+        if (keyboardText.length() + value.length() > BrowserLibrary.MAX_QUERY_LENGTH) return;
         keyboardText = keyboardText + value;
         updateKeyboardPreview();
-        pushKeyboardTextToPage();
+        if (!nativeSearch) pushKeyboardTextToPage();
     }
 
     private void backspaceKeyboardText() {
@@ -711,16 +805,21 @@ public class MainActivity extends Activity {
         int end = keyboardText.offsetByCodePoints(keyboardText.length(), -1);
         keyboardText = keyboardText.substring(0, end);
         updateKeyboardPreview();
-        pushKeyboardTextToPage();
+        if (!nativeSearch) pushKeyboardTextToPage();
     }
 
     private void submitKeyboardSearch() {
+        if (nativeSearch) {
+            searchYouTube(keyboardText);
+            return;
+        }
         pushKeyboardTextToPage();
         evaluateKeyboardScript("window.ParkedTubeKeyboard && window.ParkedTubeKeyboard.enter();");
         hideCarKeyboard();
     }
 
     private void updateKeyboardPreview() {
+        if (nativeSearch && controls != null) controls.updateSearchText(keyboardText);
         if (keyboardPreview == null) {
             return;
         }
@@ -818,7 +917,51 @@ public class MainActivity extends Activity {
     }
 
     private boolean shouldBlockUrl(Uri uri) {
-        return uri == null || !TrustedUrlPolicy.isTrustedUrl(uri.toString());
+        boolean blocked = uri == null || !TrustedUrlPolicy.isTrustedUrl(uri.toString());
+        if (blocked) Toast.makeText(this, R.string.blocked_link, Toast.LENGTH_SHORT).show();
+        return blocked;
+    }
+
+    private void updateBrowserPage() {
+        if (controls == null || webView == null) return;
+        controls.updatePage(webView.getUrl(), webView.getTitle(), webView.canGoBack());
+        if (!pageFailed) preferences.rememberPage(webView.getUrl());
+    }
+
+    private void navigateTo(String url) {
+        if (!TrustedUrlPolicy.isYouTubeUrl(url)) return;
+        controls.closePanel();
+        hideCarKeyboard();
+        closeFullscreenVideo();
+        webView.loadUrl(url);
+    }
+
+    private void searchYouTube(String query) {
+        String clean = BrowserLibrary.cleanQuery(query);
+        if (clean.isEmpty()) return;
+        preferences.library.recordSearch(clean);
+        preferences.saveLibrary();
+        navigateTo("https://www.youtube.com/results?search_query=" + Uri.encode(clean));
+    }
+
+    private void retryPage() {
+        showLoading();
+        webView.loadUrl(TrustedUrlPolicy.isTrustedUrl(lastRequestedUrl) ? lastRequestedUrl : YOUTUBE_URL);
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration configuration) {
+        super.onConfigurationChanged(configuration);
+        hideCarKeyboard();
+        controls.closePanel();
+        updateRequestedOrientation();
+        webView.setSuppressIme(shouldUseCarKeyboard());
+        ViewGroup.LayoutParams keys = keyboardKeysContainer.getParent() instanceof View
+                ? ((View) keyboardKeysContainer.getParent()).getLayoutParams() : null;
+        if (keys != null) {
+            keys.height = Math.min(dp(220), Math.max(dp(150), getResources().getDisplayMetrics().heightPixels - dp(150)));
+            ((View) keyboardKeysContainer.getParent()).setLayoutParams(keys);
+        }
     }
 
     private void updateRequestedOrientation() {
@@ -870,12 +1013,19 @@ public class MainActivity extends Activity {
     private class KeyboardBridge {
         @JavascriptInterface
         public void onInputFocus(String text) {
-            runOnUiThread(() -> showCarKeyboard(text));
+            runOnUiThread(() -> {
+                if (webView != null && TrustedUrlPolicy.isYouTubeUrl(webView.getUrl())
+                        && !controls.isPanelOpen()) showCarKeyboard(text);
+            });
         }
 
         @JavascriptInterface
         public void onInputText(String text) {
-            runOnUiThread(() -> updateKeyboardTextFromPage(text));
+            runOnUiThread(() -> {
+                if (webView != null && TrustedUrlPolicy.isYouTubeUrl(webView.getUrl()) && !nativeSearch) {
+                    updateKeyboardTextFromPage(text);
+                }
+            });
         }
     }
 

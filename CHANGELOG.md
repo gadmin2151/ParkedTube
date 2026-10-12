@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.5.0 - 2026-10-12
+
+- New high-tech car / Play / 27G identity, adaptive launcher icon and themed icon.
+- Added compact native navigation, search, bookmarks and settings with accessible touch targets.
+- Added local recent searches and saved pages, with deletion controls and bounded storage.
+- Restore the last YouTube page on launch, with an option to disable restoration.
+- Added adjustable text size and a consistent dark theme with clear touch feedback.
+- Improved the car keyboard with numbers, punctuation and a remembered language.
+- Retry the failed page instead of returning to the homepage after a network error.
+- Keep phone rotation adaptive and hide navigation during full-screen video.
+
 ## 1.4.1 - 2026-08-14
 
 - Licensed ParkedTube under PolyForm Noncommercial 1.0.0.
